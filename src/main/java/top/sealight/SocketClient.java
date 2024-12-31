@@ -43,7 +43,7 @@ public class SocketClient {
             while(true){
                 line = consoleReader.readLine();
                 if(line == null){
-                    break;
+                    break; //处理控制台输入关闭等情况
                 }
                 if(line.equals(DOUBLE_NEWLINE_MARKER)){
                     emptyLineCount++;
@@ -51,16 +51,19 @@ public class SocketClient {
                         System.out.println("输入结束，即将断开连接...");
                         break;
                     }
+                    continue;
                 }else {
                     emptyLineCount =0;
                 }
+
 
                 //将输入发送给服务器
                 socketWriter.write(line);
                 socketWriter.newLine();
                 socketWriter.flush();
             }
-
+            //关闭输出流，让服务端 readline() 返回 null
+            socket.shutdownOutput();
             //等待接受进程结束
             receiveThread.join();
         } catch (IOException e) {
