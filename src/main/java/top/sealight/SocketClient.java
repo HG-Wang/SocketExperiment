@@ -66,7 +66,8 @@ public class SocketClient {
         } catch (IOException e) {
             System.err.println("无法连接到服务器 "+severIP+":"+port + ",请检查地址是否正确或网络是否通畅");
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            Thread.currentThread().interrupt();
+            System.err.println("客户端被终端： "+e.getMessage());
         }
     }
 }
