@@ -64,7 +64,7 @@ public class SocketServer {
                 String line;
                 //接收并打印客户端消息
                 while((line = reader.readLine())!= null){
-                    System.out.println("客户端< "+socket.getRemoteSocketAddress() +"> 消息" +line);
+                    System.out.println("客户端< "+socket.getRemoteSocketAddress() +"> 消息：" +line);
 
                     //将消息回显给客户端,实现双工通信
                     writer.write("服务器已收到: "+line);
