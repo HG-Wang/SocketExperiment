@@ -19,10 +19,54 @@ public class SocketClient {
                 BufferedReader socketReader = new BufferedReader(new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8));
                 BufferedWriter socketWriter = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(),StandardCharsets.UTF_8));
         ) {
-            //与服务端通讯实现
+            System.out.println("已连接到服务器: "+severIP+":"+port);
+            //启动一个线程专门负责接收来自服务器的消息并打印到本地
+            Thread receiveThread = new Thread(
+                    ()->{
+                        try{
+                            String response;
+                            while ((response = socketReader.readLine())!=null){
+                                System.out.println("Server: "+response);
+                            }
+                        }catch(IOException e){
+                            System.err.println("接收服务器时出现异常: "+e.getMessage());
+                        }
+                    }
+            );
+            receiveThread.start();
 
+            //发送消息给服务器，直到检测到两次连按回车（空行）表示输入结束
+            System.out.println("请输入要发送给服务器的消息，连续两次回车结束输入：");
+            String line;
+            int emptyLineCount = 0; //记录连续空行数
+
+            while(true){
+                line = consoleReader.readLine();
+                if(line == null){
+                    break;
+                }
+                if(line.equals(DOUBLE_NEWLINE_MARKER)){
+                    emptyLineCount++;
+                    if(emptyLineCount == 2){
+                        System.out.println("输入结束，即将断开连接...");
+                        break;
+                    }
+                }else {
+                    emptyLineCount =0;
+                }
+
+                //将输入发送给服务器
+                socketWriter.write(line);
+                socketWriter.newLine();
+                socketWriter.flush();
+            }
+
+            //等待接受进程结束
+            receiveThread.join();
         } catch (IOException e) {
             System.err.println("无法连接到服务器 "+severIP+":"+port + ",请检查地址是否正确或网络是否通畅");
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 }
