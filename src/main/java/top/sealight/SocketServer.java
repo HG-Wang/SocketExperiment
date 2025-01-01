@@ -27,31 +27,8 @@ public class SocketServer {
 
                         String line;
                         while((line = consoleReader.readLine())!=null){
-                            if(line.equals("list")){
-                                System.out.println("当前在线客户端： "+clientWriters.keySet());
-                                continue;
-                            }
+                            handleConsoleCommand(line.trim());
 
-                            //解析输入的消息格式
-                            String[] parts = new String[2];
-                            int lastColonIndex = line.lastIndexOf(":");
-                            if(lastColonIndex!=-1){
-                                parts[0] = line.substring(0,lastColonIndex);
-                                parts[1] = line.substring(lastColonIndex+1);
-                            }else{
-                                System.out.println("消息格式错误! 请使用'客户端地址:消息内容'或'all:消息内容'");
-                                continue;
-                            }
-
-                            String target = parts[0].trim();
-                            String message = parts[1].trim();
-
-                            if(target.equals("all")){
-                                //发送给所有客户端
-                                broadcastMessage("服务器广播: "+message);
-                            }else{
-                                sendToClient(target,"服务器私信: "+message);
-                            }
                         }
 
                     } catch (IOException e) {
@@ -68,6 +45,79 @@ public class SocketServer {
         System.out.println("2. send <客户端ID> <消息> - 将消息发送给指定客户端");
         System.out.println("3  all <消息内容> - 将消息发送给所有客户端");
         System.out.println("4. help - 显示此帮助信息");
+    }
+
+    // 处理控制台命令
+    private void handleConsoleCommand(String command) {
+        if (command.isEmpty()) {
+            return;
+        }
+        // 处理 help 命令
+        else if (command.equalsIgnoreCase("help")) {
+            printHelp();
+            return;
+        }
+        // 处理 list 命令
+        else if (command.equalsIgnoreCase("list")) {
+            listClients();
+            return;
+        }
+        // 处理 all 命令
+        else if (command.startsWith("all ")) {
+            String message = command.substring(4).trim();
+            if (!message.isEmpty()) {
+                broadcastMessage("[广播] " + message);
+                System.out.println("已发送广播消息");
+            } else {
+                System.out.println("错误: 消息内容不能为空");
+            }
+        }
+        // 处理 send 命令
+        else if (command.startsWith("send ")) {
+            String[] parts = command.substring(5).trim().split(" ", 2);
+            if (parts.length != 2 || parts[1].isEmpty()) {
+                System.out.println("错误: 命令格式不正确。 使用方式： send <客户端ID> <消息>");
+                return;
+            }
+            String clientId = parts[0];
+            String message = parts[1];
+            sendToClientById(clientId, message);
+            return;
+        }
+        // 未知命令
+        else {
+            System.out.println("未知命令。 输入‘help’ 查看可用命令。");
+        }
+    }
+
+    private static void listClients(){
+        if(clientWriters.isEmpty()){
+            System.out.println("当前没有客户端连接");
+            return;
+        }
+
+        System.out.println("\n当前在线服务端列表: ");
+        int id = 1;
+        for(String clientAddress : clientWriters.keySet()){
+            System.out.printf("%d. %s%n",id++,clientAddress);
+        }
+        System.out.println();
+    }
+
+    //通过客户端ID发送消息
+    private void sendToClientById(String clientId,String message){
+        try{
+            int id = Integer.parseInt(clientId);
+            if(id <= 0 || id > clientWriters.size()){
+                System.out.println("错误: 无效的客户端ID。使用 ‘list’ 命令查看当前在线客户端。");
+                return;
+            }
+            //获取对应ID的客户端地址
+            String targetAddress = (String) clientWriters.keySet().toArray()[id-1];
+            sendToClient(targetAddress,message);
+        } catch (NumberFormatException e) {
+            System.err.println("错误: 客户端ID必须是数字");
+        }
     }
 
     //广播消息给所有客户端
