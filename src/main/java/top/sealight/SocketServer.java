@@ -64,6 +64,20 @@ public class SocketServer {
 
     }
 
+    //广播消息给所有客户端
+    private void broadcastMessage(String message){
+        for(Map.Entry<String,BufferedWriter> entry : clientWriters.entrySet()) {
+            try {
+                BufferedWriter writer = entry.getValue();
+                writer.write(message);
+                writer.newLine();
+                writer.flush();
+            } catch (IOException e) {
+                System.err.println("向客户端 "+entry.getKey()+" 发送消息失败: "+e.getMessage());
+            }
+        }
+    }
+
     SocketServer(int port ,int maxClients){
         try{
             //创建serverSocket的同时绑定到制定端口
