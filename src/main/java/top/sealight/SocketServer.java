@@ -144,7 +144,35 @@ public class SocketServer {
 
     //踢出指定客户端
     private void kickClient(String clientId){
+        try{
+            int id = Integer.parseInt(clientId);
+            if(id <= 0 || id > clientWriters.size()){
+                System.out.println("错误: 无效的客户端ID。使用 ‘list’ 命令查看当前在线客户端。");
+                return;
+            }
+            //获取对应ID的客户端地址
+            String targetAddress = (String) clientWriters.keySet().toArray()[id-1];
+            BufferedWriter writer = clientWriters.get(targetAddress);
+            if(writer != null){
+                try{
+                    //发送断开连接消息给客户端
+                    writer.write("SEVER_COMMAND_DISCONNECT:你已被服务器断开连接");
+                    writer.newLine();
+                    writer.flush();
 
+                    //从Map中移除客户端
+                    clientWriters.remove(targetAddress);
+                    System.out.println("已断开客户端 "+id+" <"+targetAddress+"> 的连接");
+
+                    //更新客户端列表
+                    listClients();
+                } catch (IOException e) {
+                    System.err.println("断开客户端连接时发生错误: "+e.getMessage());
+                }
+            }
+        } catch (NumberFormatException e) {
+            System.err.println("错误: 客户端ID必须为数字");
+        }
     }
 
     private static void listClients(){
@@ -238,7 +266,10 @@ public class SocketServer {
                 //将客户端的处理逻辑交给线程池
                 threadPoll.execute(new ClientHandler(clientSocket));
             } catch (IOException e) {
-                System.err.println("接收客户端连接时出现差错");
+                // 如果不是因为服务器主动关闭导致的异常，可打印错误信息；否则可以选择忽略
+                if (isRunning) {
+                    System.err.println("接收客户端连接时出现差错: " + e.getMessage());
+                }
             }
         }
     }
@@ -278,7 +309,12 @@ public class SocketServer {
                     System.out.println("客户端< "+socket.getRemoteSocketAddress() +"> 消息：" +line);
                 }
             }catch(IOException e) {
-                System.err.println("客户端通信异常: "+e.getMessage());
+                // 如果是“Socket closed”异常，可忽略或做简单提示
+                if (e.getMessage() != null && e.getMessage().contains("Socket closed")) {
+                    System.out.println("客户端< " + socket.getRemoteSocketAddress() + "> 已主动断开连接");
+                } else {
+                    System.err.println("客户端通信异常: " + e.getMessage());
+                }
             }finally {
                 //清理资源
                 clientWriters.remove(clientAddress);
