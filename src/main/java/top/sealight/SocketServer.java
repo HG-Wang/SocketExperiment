@@ -44,7 +44,9 @@ public class SocketServer {
         System.out.println("1. list - 显示所有在线客户端");
         System.out.println("2. send <客户端ID> <消息> - 将消息发送给指定客户端");
         System.out.println("3  all <消息内容> - 将消息发送给所有客户端");
-        System.out.println("4. help - 显示此帮助信息");
+        System.out.println("4. kick <客户端ID> - 断开指定客户端的连接");
+        System.out.println("5. shutdown - 关闭服务器");
+        System.out.println("6. help - 显示此帮助信息\n");
     }
 
     // 处理控制台命令
@@ -60,6 +62,11 @@ public class SocketServer {
         // 处理 list 命令
         else if (command.equalsIgnoreCase("list")) {
             listClients();
+            return;
+        }
+        // 处理 shutdown 命令
+        else if (command.equalsIgnoreCase("shutdown")) {
+            shutdown();
             return;
         }
         // 处理 all 命令
@@ -84,10 +91,25 @@ public class SocketServer {
             sendToClientById(clientId, message);
             return;
         }
+        //处理 kick 命令
+        else if (command.startsWith("kick ")) {
+            String clientId = command.substring(5).trim();
+            kickClient(clientId);
+        }
         // 未知命令
         else {
             System.out.println("未知命令。 输入‘help’ 查看可用命令。");
         }
+    }
+
+    //关闭服务器
+    private void shutdown(){
+
+    }
+
+    //踢出指定客户端
+    private void kickClient(String clientId){
+
     }
 
     private static void listClients(){
