@@ -78,6 +78,23 @@ public class SocketServer {
         }
     }
 
+    //发送消息给指定客户端
+    private void sendToClient(String clientAddress,String message){
+        BufferedWriter writer = clientWriters.get(clientAddress);
+        if(writer!=null){
+            try{
+                writer.write(message);
+                writer.newLine();
+                writer.flush();
+                System.out.println("消息已发送至 "+clientAddress);
+            }catch (IOException e){
+                System.err.println("向客户端 "+clientAddress+" 发送消息失败: "+e.getMessage());
+            }
+        }else {
+            System.out.println("客户端 "+clientAddress +" 不存在或已断开连接");
+        }
+    }
+
     SocketServer(int port ,int maxClients){
         try{
             //创建serverSocket的同时绑定到制定端口
