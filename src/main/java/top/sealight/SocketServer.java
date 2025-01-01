@@ -6,6 +6,8 @@ import java.net.ServerSocket;
 
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -13,6 +15,54 @@ import java.util.concurrent.Executors;
 public class SocketServer {
     private ServerSocket serverSocket;
     private ExecutorService threadPoll;
+    //使用 ConcurrentHashMap 存储所有连接的客户端，key 为客户端地址，value为对应的输出流
+    private static Map<String,BufferedWriter> clientWriters = new ConcurrentHashMap<>();
+
+    //控制台输入处理线程
+    private void startConsoleThread(){
+        new Thread(
+                ()->{
+                    try(BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in,StandardCharsets.UTF_8))) {
+                        System.out.println("输入 ‘客户端地址:消息内容’ 将消息发送给指定客户端");
+                        System.out.println("输入 ‘all:消息内容’ 将消息发送给所有客户端");
+                        System.out.println("输入‘ list ’显示所有在线客户端");
+
+                        String line;
+                        while((line = consoleReader.readLine())!=null){
+                            if(line.equals("list")){
+                                System.out.println("当前在线客户端： "+clientWriters.keySet());
+                                continue;
+                            }
+
+                            //解析输入的消息格式
+                            String[] parts = new String[2];
+                            int lastColonIndex = line.lastIndexOf(":");
+                            if(lastColonIndex!=-1){
+                                parts[0] = line.substring(0,lastColonIndex);
+                                parts[1] = line.substring(lastColonIndex+1);
+                            }else{
+                                System.out.println("消息格式错误! 请使用'客户端地址:消息内容'或'all:消息内容'");
+                                continue;
+                            }
+
+                            String target = parts[0].trim();
+                            String message = parts[1].trim();
+
+                            if(target.equals("all")){
+                                //发送给所有客户端
+                                broadcastMessage("服务器广播: "+message);
+                            }else{
+                                sendToClient(target,"服务器私信: "+message);
+                            }
+                        }
+
+                    } catch (IOException e) {
+                        System.err.println("服务器控制台输入处理异常: "+e.getMessage());
+                    }
+                }
+        ).start();
+
+    }
 
     SocketServer(int port ,int maxClients){
         try{
