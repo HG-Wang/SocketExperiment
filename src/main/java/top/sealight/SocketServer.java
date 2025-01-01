@@ -23,9 +23,7 @@ public class SocketServer {
         new Thread(
                 ()->{
                     try(BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in,StandardCharsets.UTF_8))) {
-                        System.out.println("输入 ‘客户端地址:消息内容’ 将消息发送给指定客户端");
-                        System.out.println("输入 ‘all:消息内容’ 将消息发送给所有客户端");
-                        System.out.println("输入‘ list ’显示所有在线客户端");
+                       printHelp();
 
                         String line;
                         while((line = consoleReader.readLine())!=null){
@@ -62,6 +60,14 @@ public class SocketServer {
                 }
         ).start();
 
+    }
+
+    private void printHelp(){
+        System.out.println("\n可用命令:");
+        System.out.println("1. list - 显示所有在线客户端");
+        System.out.println("2. send <客户端ID> <消息> - 将消息发送给指定客户端");
+        System.out.println("3  all <消息内容> - 将消息发送给所有客户端");
+        System.out.println("4. help - 显示此帮助信息");
     }
 
     //广播消息给所有客户端
