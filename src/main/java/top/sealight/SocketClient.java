@@ -26,6 +26,13 @@ public class SocketClient {
                         try{
                             String response;
                             while ((response = socketReader.readLine())!=null){
+                                if(response.startsWith("SEVER_COMMAND_DISCONNECT:")){
+                                    String message = response.substring("SEVER_COMMAND_DISCONNECT:".length());
+                                    System.out.println("服务器通知: "+message);
+                                    //主动关闭连接
+                                    socket.close();
+                                    System.exit(0);
+                                }
                                 System.out.println("Server: "+response);
                             }
                         }catch(IOException e){

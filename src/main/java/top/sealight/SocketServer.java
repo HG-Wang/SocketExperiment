@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 
 public class SocketServer {
@@ -17,6 +18,7 @@ public class SocketServer {
     private ExecutorService threadPoll;
     //使用 ConcurrentHashMap 存储所有连接的客户端，key 为客户端地址，value为对应的输出流
     private static Map<String,BufferedWriter> clientWriters = new ConcurrentHashMap<>();
+    private volatile boolean isRunning = true;
 
     //控制台输入处理线程
     private void startConsoleThread(){
@@ -104,7 +106,40 @@ public class SocketServer {
 
     //关闭服务器
     private void shutdown(){
+        System.out.println("正在关闭服务器...");
+        isRunning = false; //设置运行标志为 false;
+        //向所有客户端发送关闭消息
+        broadcastMessage("SEVER_COMMAND_DISCONNECT:服务器即将关闭");
+        //关闭所有客户端连接
+        for (BufferedWriter writer:clientWriters.values()){
+            try{
+                writer.close();
+            } catch (IOException e) {
+                //强制关闭,不予处理关闭异常
+            }
+        }
+        clientWriters.clear();  //清空客户端列表
+        threadPoll.shutdown();  //关闭线程池
+        try{
+            //等待所有任务完成
+            if(!threadPoll.awaitTermination(5, TimeUnit.SECONDS)){
+                threadPoll.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            threadPoll.shutdownNow();
+        }
 
+        //关闭服务器 Socket
+        try{
+            if(serverSocket != null && !serverSocket.isClosed()){
+                serverSocket.close();
+            }
+        } catch (IOException e) {
+            System.err.println("关闭服务器 Socket 发生错误: "+e.getMessage());
+        }
+
+        System.out.println("服务器已关闭");
+        System.exit(0);
     }
 
     //踢出指定客户端
@@ -191,10 +226,14 @@ public class SocketServer {
     }
 
     public void start(){
-        while (true){
+        while (isRunning){
             try{
                 //等待客户端连接
                 Socket clientSocket = serverSocket.accept();
+                if(!isRunning){
+                    clientSocket.close();
+                    break;
+                }
                 System.out.println("有客户端连接: " + clientSocket.getRemoteSocketAddress());
                 //将客户端的处理逻辑交给线程池
                 threadPoll.execute(new ClientHandler(clientSocket));
