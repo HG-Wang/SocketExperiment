@@ -13,6 +13,7 @@ public class SocketClient {
     private static final int DEFAULT_PORT = 12345;
     private static final int FILE_TRANSFER_PORT = 12346;
     private static final String EXIT_COMMAND = "exit";
+    private static final String MSG_FIN = "MSG_FIN";
 
     // 使用原子布尔值来安全地控制客户端状态
     private final AtomicBoolean isRunning = new AtomicBoolean(true);

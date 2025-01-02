@@ -222,7 +222,7 @@ public class SocketServer {
     private void shutdown() {
         System.out.println("正在关闭服务器...");
         isRunning = false;
-        broadcastMessage("SEVER_COMMAND_DISCONNECT:服务器即将关闭");
+        broadcastMessage("SERVER_COMMAND_DISCONNECT:服务器即将关闭");
 
         for (BufferedWriter writer : CLIENT_WRITERS.values()) {
             try {
@@ -345,7 +345,7 @@ public class SocketServer {
         BufferedWriter writer = CLIENT_WRITERS.get(targetAddress);
         if (writer != null) {
             try {
-                writer.write("SEVER_COMMAND_DISCONNECT:你已被服务器断开连接");
+                writer.write("SERVER_COMMAND_DISCONNECT:你已被服务器断开连接");
                 writer.newLine();
                 writer.flush();
                 CLIENT_WRITERS.remove(targetAddress);
@@ -361,6 +361,7 @@ public class SocketServer {
      * 客户端处理器，用于处理每个客户端的通信与资源清理
      */
     private static class ClientHandler implements Runnable {
+        private static final String MSG_FIN = "MSG_FIN";  //用来识别client消息结束标识
         private final Socket socket;
         private final String clientAddress;
 
