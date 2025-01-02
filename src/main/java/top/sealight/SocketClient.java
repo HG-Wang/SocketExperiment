@@ -2,82 +2,183 @@ package top.sealight;
 
 import java.io.*;
 import java.net.Socket;
-import java.net.UnknownHostException;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SocketClient {
-    //用于控制读取输入时,空行作为结束标识
-    private static final String DOUBLE_NEWLINE_MARKER = "";
+    private static final String SERVER_COMMAND_DISCONNECT = "SERVER_COMMAND_DISCONNECT:";
+    private static final String DEFAULT_SERVER_IP = "127.0.0.1";
+    private static final int DEFAULT_PORT = 12345;
+    private static final String EXIT_COMMAND = "exit";
 
-    public static void main(String[] args){
-        String severIP = "127.0.0.1";   //默认服务器IP
-        int port = 12345;               //默认服务器端口
+    // 使用原子布尔值来安全地控制客户端状态
+    private final AtomicBoolean isRunning = new AtomicBoolean(true);
 
-        try(
-                Socket socket = new Socket(severIP,port);
-                BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-                BufferedReader socketReader = new BufferedReader(new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8));
-                BufferedWriter socketWriter = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(),StandardCharsets.UTF_8));
-        ) {
-            System.out.println("已连接到服务器: "+severIP+":"+port);
-            //启动一个线程专门负责接收来自服务器的消息并打印到本地
-            Thread receiveThread = new Thread(
-                    ()->{
-                        try{
-                            String response;
-                            while ((response = socketReader.readLine())!=null){
-                                if(response.startsWith("SEVER_COMMAND_DISCONNECT:")){
-                                    String message = response.substring("SEVER_COMMAND_DISCONNECT:".length());
-                                    System.out.println("服务器通知: "+message);
-                                    //主动关闭连接
-                                    socket.close();
-                                    System.exit(0);
-                                }
-                                System.out.println("Server: "+response);
-                            }
-                        }catch(IOException e){
-                            System.err.println("接收服务器时出现异常: "+e.getMessage());
-                        }
-                    }
-            );
-            receiveThread.start();
+    private final String serverIP;
+    private final int port;
+    private Socket socket;
 
-            //发送消息给服务器，直到检测到两次连按回车（空行）表示输入结束
-            System.out.println("请输入要发送给服务器的消息，连续两次回车结束输入：");
-            String line;
-            int emptyLineCount = 0; //记录连续空行数
+    public SocketClient(String serverIP, int port) {
+        this.serverIP = serverIP != null ? serverIP : DEFAULT_SERVER_IP;
+        this.port = port > 0 ? port : DEFAULT_PORT;
+    }
 
-            while(true){
-                line = consoleReader.readLine();
-                if(line == null){
-                    break; //处理控制台输入关闭等情况
-                }
-                if(line.equals(DOUBLE_NEWLINE_MARKER)){
-                    emptyLineCount++;
-                    if(emptyLineCount == 2){
-                        System.out.println("输入结束，即将断开连接...");
-                        break;
-                    }
-                    continue;
-                }else {
-                    emptyLineCount =0;
-                }
-
-
-                //将输入发送给服务器
-                socketWriter.write(line);
-                socketWriter.newLine();
-                socketWriter.flush();
-            }
-            //关闭输出流，让服务端 readline() 返回 null
-            socket.shutdownOutput();
-            //等待接受进程结束
-            receiveThread.join();
+    public void start() {
+        try {
+            connectToServer();
+            startMessageHandling();
         } catch (IOException e) {
-            System.err.println("无法连接到服务器 "+severIP+":"+port + ",请检查地址是否正确或网络是否通畅");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            System.err.println("客户端被中断： "+e.getMessage());
+            System.err.printf("连接服务器失败 %s:%d - %s%n", serverIP, port, e.getMessage());
         }
+    }
+
+    private void connectToServer() throws IOException {
+        socket = new Socket(serverIP, port);
+        System.out.printf("已连接到服务器: %s:%d%n", serverIP, port);
+    }
+
+    private void startMessageHandling() {
+        try (BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+             BufferedReader socketReader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+             BufferedWriter socketWriter = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8))) {
+
+            // 启动接收消息的线程
+            Thread receiveThread = startReceiveThread(socketReader);
+
+            // 处理发送消息
+            handleUserInput(consoleReader, socketWriter);
+
+            // 清理资源
+            cleanup(receiveThread);
+
+        } catch (IOException | InterruptedException e) {
+            handleError(e);
+        }
+    }
+
+    private Thread startReceiveThread(BufferedReader socketReader) {
+        Thread receiveThread = new Thread(() -> {
+            try {
+                receiveMessages(socketReader);
+            } catch (IOException e) {
+                if (isRunning.get()) {
+                    System.err.println("接收服务器消息时出现异常: " + e.getMessage());
+                }
+            }
+        });
+        receiveThread.setDaemon(true); // 设置为守护线程
+        receiveThread.start();
+        return receiveThread;
+    }
+
+    private void receiveMessages(BufferedReader socketReader) throws IOException {
+        String response;
+        while (isRunning.get() && (response = socketReader.readLine()) != null) {
+            if (response.startsWith(SERVER_COMMAND_DISCONNECT)) {
+                handleServerDisconnect(response);
+                break;
+            }
+            System.out.println("Server: " + response);
+        }
+    }
+
+    private void handleServerDisconnect(String response) {
+        String message = response.substring(SERVER_COMMAND_DISCONNECT.length());
+        System.out.println("服务器通知: " + message);
+        shutdown();
+    }
+
+    private void handleUserInput(BufferedReader consoleReader, BufferedWriter socketWriter) throws IOException {
+        System.out.println("请输入要发送给服务器的消息，连续两次回车发送，输入exit退出：");
+        MessageBuilder messageBuilder = new MessageBuilder();
+
+        while (isRunning.get()) {
+            String line = consoleReader.readLine();
+            if (line == null || EXIT_COMMAND.equalsIgnoreCase(line.trim())) {
+                break;
+            }
+
+            if (messageBuilder.appendLine(line)) {
+                String message = messageBuilder.getMessage();
+                if (!message.isEmpty()) {
+                    sendMessage(socketWriter, message);
+                }
+                messageBuilder.reset();
+                System.out.println("消息已发送，请继续输入（连续两次回车发送，输入exit退出）：");
+            }
+        }
+    }
+
+    private void sendMessage(BufferedWriter writer, String message) throws IOException {
+        writer.write(message);
+        writer.newLine();
+        writer.flush();
+    }
+
+    private void cleanup(Thread receiveThread) throws IOException, InterruptedException {
+        shutdown();
+        if (socket != null && !socket.isClosed()) {
+            socket.shutdownOutput();
+        }
+        receiveThread.join(5000); // 等待接收线程最多5秒
+    }
+
+    private void shutdown() {
+        isRunning.set(false);
+        try {
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+        } catch (IOException e) {
+            System.err.println("关闭socket时出现异常: " + e.getMessage());
+        }
+    }
+
+    private void handleError(Exception e) {
+        if (e instanceof SocketException && !isRunning.get()) {
+            // 正常关闭导致的异常，忽略
+            return;
+        }
+        if (e instanceof InterruptedException) {
+            Thread.currentThread().interrupt();
+            System.err.println("客户端被中断：" + e.getMessage());
+        } else {
+            System.err.println("客户端运行异常：" + e.getMessage());
+        }
+    }
+
+    // 内部类用于处理消息构建
+    private static class MessageBuilder {
+        private final StringBuilder content = new StringBuilder();
+        private int emptyLineCount = 0;
+
+        public boolean appendLine(String line) {
+            if (line.trim().isEmpty()) {
+                emptyLineCount++;
+                return emptyLineCount == 1;
+            }
+
+            emptyLineCount = 0;
+            if (content.length() > 0) {
+                content.append("\n");
+            }
+            content.append(line);
+            return false;
+        }
+
+        public String getMessage() {
+            return content.toString().trim();
+        }
+
+        public void reset() {
+            content.setLength(0);
+            emptyLineCount = 0;
+        }
+    }
+
+    public static void main(String[] args) {
+        SocketClient client = new SocketClient(DEFAULT_SERVER_IP, DEFAULT_PORT);
+        client.start();
     }
 }
