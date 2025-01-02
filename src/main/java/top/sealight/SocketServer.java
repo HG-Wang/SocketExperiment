@@ -385,9 +385,23 @@ public class SocketServer {
                 writer.flush();
 
                 String line;
+
+                StringBuilder msg =new StringBuilder();
                 // 接收并打印客户端的消息
                 while ((line = reader.readLine()) != null) {
-                    System.out.println("客户端<" + clientAddress + "> 消息: " + line);
+                    if (line.endsWith(MSG_FIN)) {
+                        // 添加当前行（不包含结束标记）
+                        if (line.length() >= MSG_FIN.length()) {
+                            msg.append(line, 0, line.length() - MSG_FIN.length());
+                        }
+                        // 打印完整消息
+                        System.out.println(msg.toString());
+                        msg.setLength(0);
+                    } else {
+                        System.out.println();
+                        System.out.println("来自"+clientAddress+"的消息: ");
+                        msg.append(line).append("\n");
+                    }
                 }
             } catch (IOException e) {
                 // 如果是“Socket closed”异常，可忽略或做简单提示

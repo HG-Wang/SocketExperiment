@@ -156,7 +156,7 @@ public class SocketClient {
     }
 
     private void sendMessage(BufferedWriter writer, String message) throws IOException {
-        writer.write(message);
+        writer.write(message+MSG_FIN);
         writer.newLine();
         writer.flush();
     }
