@@ -243,6 +243,7 @@ public class SocketServer {
             }
         } catch (InterruptedException e) {
             threadPool.shutdownNow();
+            Thread.currentThread().interrupt();
         }
 
         try {
