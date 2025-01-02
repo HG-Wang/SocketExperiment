@@ -11,8 +11,8 @@ public class SocketClient {
     private static final String SERVER_COMMAND_DISCONNECT = "SERVER_COMMAND_DISCONNECT:";
     private static final String DEFAULT_SERVER_IP = "127.0.0.1";
     private static final int DEFAULT_PORT = 12345;
-    private static final int FILE_TRANSFER_PORT = 12346;
     private static final String EXIT_COMMAND = "exit";
+    private static final String FILE_TRANSFER_COMMAND = "FILE_TRANSFER_PORT:";
     private static final String MSG_FIN = "MSG_FIN";
 
     // 使用原子布尔值来安全地控制客户端状态
@@ -30,53 +30,56 @@ public class SocketClient {
     public void start() {
         try {
             connectToServer();
-            startFileReceiverServer(); //接收文件的服务启用
             startMessageHandling();
         } catch (IOException e) {
             System.err.printf("连接服务器失败 %s:%d - %s%n", serverIP, port, e.getMessage());
         }
     }
 
-    //接收文件
-    private void startFileReceiverServer() {
-        Thread fileServerThread = new Thread(
-                ()->{
-                    try (ServerSocket fileServer = new ServerSocket(FILE_TRANSFER_PORT)){
-                        while (isRunning.get()){
-                            try(
-                                Socket fileSocket = fileServer.accept();
-                                DataInputStream dataIn = new DataInputStream(fileSocket.getInputStream())
-                            ){
-                                String fileName = dataIn.readUTF();
-                                long fileSize = dataIn.readLong();
-                                File savedFile = new File("received_"+fileName);
-                                try (BufferedOutputStream fileOut = new BufferedOutputStream(new FileOutputStream(savedFile))){
-                                    byte[] buffer = new byte[4096];
-                                    long bytesRead = 0;
-                                    int read;
-                                    while (bytesRead < fileSize && (read = dataIn.read(buffer)) != -1){
-                                        fileOut.write(buffer,0,read);
-                                        bytesRead += read;
-                                    }
-                                    fileOut.flush();
-                                    System.out.println("已接收文件: "+savedFile.getAbsoluteFile());
-                                }catch (IOException e){
-                                    if(isRunning.get()){
-                                        System.err.println("接收文件时出现错误: "+e.getMessage());
-                                    }
-                                }
-                            }
-                        }
-                    } catch (IOException e) {
-                        if(isRunning.get()){
-                            System.err.println("文件接收端口启动失败: "+e.getMessage());
-                        }
-                    }
-                }
-        );
-        fileServerThread.setDaemon(true);
-        fileServerThread.start();
+    private void receiveMessages(BufferedReader socketReader) throws IOException {
+        String response;
+        while (isRunning.get() && (response = socketReader.readLine()) != null) {
+            if (response.startsWith(SERVER_COMMAND_DISCONNECT)) {
+                handleServerDisconnect(response);
+                break;
+            }
+            if (response.startsWith(FILE_TRANSFER_COMMAND)) {
+                // 处理文件传输
+                handleFileTransfer(response);
+                continue;
+            }
+            System.out.println("Server: " + response);
+        }
     }
+
+    private void handleFileTransfer(String response) {
+        try {
+            int filePort = Integer.parseInt(response.substring(FILE_TRANSFER_COMMAND.length()));
+            // 建立文件传输连接
+            try (Socket fileSocket = new Socket(serverIP, filePort);
+                 DataInputStream dataIn = new DataInputStream(fileSocket.getInputStream())) {
+                
+                String fileName = dataIn.readUTF();
+                long fileSize = dataIn.readLong();
+                
+                File savedFile = new File("received_" + fileName);
+                try (BufferedOutputStream fileOut = new BufferedOutputStream(new FileOutputStream(savedFile))) {
+                    byte[] buffer = new byte[4096];
+                    long bytesRead = 0;
+                    int read;
+                    while (bytesRead < fileSize && (read = dataIn.read(buffer)) != -1) {
+                        fileOut.write(buffer, 0, read);
+                        bytesRead += read;
+                    }
+                    fileOut.flush();
+                    System.out.println("已接收文件: " + savedFile.getAbsolutePath());
+                }
+            }
+        } catch (IOException | NumberFormatException e) {
+            System.err.println("接收文件时出错: " + e.getMessage());
+        }
+    }
+    
 
     private void connectToServer() throws IOException {
         socket = new Socket(serverIP, port);
@@ -117,16 +120,6 @@ public class SocketClient {
         return receiveThread;
     }
 
-    private void receiveMessages(BufferedReader socketReader) throws IOException {
-        String response;
-        while (isRunning.get() && (response = socketReader.readLine()) != null) {
-            if (response.startsWith(SERVER_COMMAND_DISCONNECT)) {
-                handleServerDisconnect(response);
-                break;
-            }
-            System.out.println("Server: " + response);
-        }
-    }
 
     private void handleServerDisconnect(String response) {
         String message = response.substring(SERVER_COMMAND_DISCONNECT.length());

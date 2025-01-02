@@ -190,27 +190,37 @@ public class SocketServer {
             return;
         }
         String targetAddress = (String) CLIENT_WRITERS.keySet().toArray()[id - 1];
-        File file = new File(filePath);
-        if (!file.exists()) {
-            System.out.println("错误: 文件不存在 - " + filePath);
-            return;
-        }
-        // 发送文件，需要新的数据通道，这里用简单方式演示
-        try (Socket fileSocket = new Socket(targetAddress.split(":")[0].replace("/", ""), 12346);
-             BufferedInputStream fileInput = new BufferedInputStream(new FileInputStream(file));
-             DataOutputStream dataOut = new DataOutputStream(fileSocket.getOutputStream())) {
-
-            dataOut.writeUTF(file.getName());
-            dataOut.writeLong(file.length());
-
-            byte[] buffer = new byte[4096];
-            int len;
-            while ((len = fileInput.read(buffer)) != -1) {
-                dataOut.write(buffer, 0, len);
+        // 使用临时的ServerSocket获取随机可用端口
+        try (ServerSocket fileServer = new ServerSocket(0)) { // 0表示随机可用端口
+            int filePort = fileServer.getLocalPort();
+        
+            // 先发送文件传输信息给客户端
+            BufferedWriter writer = CLIENT_WRITERS.get(targetAddress);
+            if (writer != null) {
+                writer.write("FILE_TRANSFER_PORT:" + filePort);
+                writer.newLine();
+                writer.flush();
             }
-            dataOut.flush();
-            System.out.println("文件已发送给客户端 " + targetAddress);
 
+            // 等待客户端连接
+            Socket fileSocket = fileServer.accept();
+        
+            // 发送文件
+            File file = new File(filePath);
+            try (BufferedInputStream fileInput = new BufferedInputStream(new FileInputStream(file));
+                 DataOutputStream dataOut = new DataOutputStream(fileSocket.getOutputStream())) {
+
+                dataOut.writeUTF(file.getName());
+                dataOut.writeLong(file.length());
+
+                byte[] buffer = new byte[4096];
+                int len;
+                while ((len = fileInput.read(buffer)) != -1) {
+                    dataOut.write(buffer, 0, len);
+                }
+                dataOut.flush();
+                System.out.println("文件已发送给客户端 " + targetAddress);
+            }
         } catch (IOException e) {
             System.err.println("发送文件时出错: " + e.getMessage());
         }
