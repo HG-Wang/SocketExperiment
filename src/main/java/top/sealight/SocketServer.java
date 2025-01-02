@@ -1,8 +1,10 @@
 package top.sealight;
 
 import java.io.*;
+import java.lang.reflect.Field;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -116,6 +118,7 @@ public class SocketServer {
             }
             case "send" -> handleSendCommand(command);
             case "kick" -> handleKickCommand(command);
+            case "sendfile" -> handleSendFileCommand(command);
             default -> System.out.println("未知命令。输入 'help' 查看可用命令。");
         }
     }
@@ -160,6 +163,60 @@ public class SocketServer {
     private void handleKickCommand(String command) {
         String clientId = command.substring(5).trim();
         kickClient(clientId);
+    }
+
+    /**
+     * 针对 "sendfile"的处理
+     */
+    private void handleSendFileCommand(String command) {
+        String[] parts = command.substring(8).trim().split(" ", 2);
+        if (parts.length != 2 || parts[1].isEmpty()) {
+            System.out.println("错误: 命令格式不正确。使用方式： sendfile <客户端ID> <文件路径>");
+            return;
+        }
+        String clientId = parts[0];
+        String filePath = parts[1];
+        sendFileToClientById(clientId, filePath);
+    }
+
+    //通过客户端ID发送文件
+    private void sendFileToClientById(String clientId, String filePath){
+        int id;
+        try{
+            id = Integer.parseInt(clientId);
+        }catch (NumberFormatException e){
+            System.err.println("错误: 客户端ID必须是数字");
+            return;
+        }
+        if(id<=0 || id > CLIENT_WRITERS.size()){
+            System.err.println("错误: 无效的客户端ID. 使用 ‘list’ 命令查看当前在线客户端。");
+            return;
+        }
+        String targetAddress = (String) CLIENT_WRITERS.keySet().toArray()[id-1];
+        File file = new File(filePath);
+        if(!file.exists()){
+            System.out.println("错误: 文件不存在 - " + filePath);
+            return;
+        }
+        // 发送文件，需要新的数据通道，这里用简单方式演示
+        try (Socket fileSocket = new Socket(targetAddress.split(":")[0].replace("/", ""), 12346);
+             BufferedInputStream fileInput = new BufferedInputStream(new FileInputStream(file));
+             DataOutputStream dataOut = new DataOutputStream(fileSocket.getOutputStream())) {
+
+            dataOut.writeUTF(file.getName());
+            dataOut.writeLong(file.length());
+
+            byte[] buffer = new byte[4096];
+            int len;
+            while ((len = fileInput.read(buffer)) != -1) {
+                dataOut.write(buffer, 0, len);
+            }
+            dataOut.flush();
+            System.out.println("文件已发送给客户端 " + targetAddress);
+
+        } catch (IOException e) {
+            System.err.println("发送文件时出错: " + e.getMessage());
+        }
     }
 
     /**
