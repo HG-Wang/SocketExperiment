@@ -29,8 +29,8 @@ public class SocketClient {
     public void start() {
         try {
             connectToServer();
+            startFileReceiverServer(); //接收文件的服务启用
             startMessageHandling();
-            startFileReceiverServer(); //接收文件的服务端口
         } catch (IOException e) {
             System.err.printf("连接服务器失败 %s:%d - %s%n", serverIP, port, e.getMessage());
         }
@@ -111,7 +111,7 @@ public class SocketClient {
                 }
             }
         });
-        receiveThread.setDaemon(true); // 设置为守护线程
+        receiveThread.setDaemon(true);
         receiveThread.start();
         return receiveThread;
     }

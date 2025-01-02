@@ -12,12 +12,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-/**
- * 优化要点：
- * 1. 使用更清晰的命名及注释，方便维护。
- * 2. 适度拆分逻辑，减少重复代码。
- * 3. 添加最小化的异常处理提示以及适当的日志输出。
- */
 public class SocketServer {
     private final ServerSocket serverSocket;
     private final ExecutorService threadPool;
@@ -140,6 +134,8 @@ public class SocketServer {
             return "send";
         } else if (command.startsWith("kick ")) {
             return "kick";
+        } else if (command.startsWith("sendfile ")) {
+            return "sendfile";
         }
         return "";
     }
@@ -181,21 +177,21 @@ public class SocketServer {
     }
 
     //通过客户端ID发送文件
-    private void sendFileToClientById(String clientId, String filePath){
+    private void sendFileToClientById(String clientId, String filePath) {
         int id;
-        try{
+        try {
             id = Integer.parseInt(clientId);
-        }catch (NumberFormatException e){
+        } catch (NumberFormatException e) {
             System.err.println("错误: 客户端ID必须是数字");
             return;
         }
-        if(id<=0 || id > CLIENT_WRITERS.size()){
-            System.err.println("错误: 无效的客户端ID. 使用 ‘list’ 命令查看当前在线客户端。");
+        if (id <= 0 || id > CLIENT_WRITERS.size()) {
+            System.out.println("错误: 无效的客户端ID。使用 'list' 命令查看当前在线客户端。");
             return;
         }
-        String targetAddress = (String) CLIENT_WRITERS.keySet().toArray()[id-1];
+        String targetAddress = (String) CLIENT_WRITERS.keySet().toArray()[id - 1];
         File file = new File(filePath);
-        if(!file.exists()){
+        if (!file.exists()) {
             System.out.println("错误: 文件不存在 - " + filePath);
             return;
         }
