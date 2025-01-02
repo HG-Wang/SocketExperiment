@@ -1,6 +1,7 @@
 package top.sealight;
 
 import java.io.*;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
@@ -10,6 +11,7 @@ public class SocketClient {
     private static final String SERVER_COMMAND_DISCONNECT = "SERVER_COMMAND_DISCONNECT:";
     private static final String DEFAULT_SERVER_IP = "127.0.0.1";
     private static final int DEFAULT_PORT = 12345;
+    private static final int FILE_TRANSFER_PORT = 12346;
     private static final String EXIT_COMMAND = "exit";
 
     // 使用原子布尔值来安全地控制客户端状态
@@ -28,9 +30,51 @@ public class SocketClient {
         try {
             connectToServer();
             startMessageHandling();
+            startFileReceiverServer(); //接收文件的服务端口
         } catch (IOException e) {
             System.err.printf("连接服务器失败 %s:%d - %s%n", serverIP, port, e.getMessage());
         }
+    }
+
+    //接收文件
+    private void startFileReceiverServer() {
+        Thread fileServerThread = new Thread(
+                ()->{
+                    try (ServerSocket fileServer = new ServerSocket(FILE_TRANSFER_PORT)){
+                        while (isRunning.get()){
+                            try(
+                                Socket fileSocket = fileServer.accept();
+                                DataInputStream dataIn = new DataInputStream(fileSocket.getInputStream())
+                            ){
+                                String fileName = dataIn.readUTF();
+                                long fileSize = dataIn.readLong();
+                                File savedFile = new File("received_"+fileName);
+                                try (BufferedOutputStream fileOut = new BufferedOutputStream(new FileOutputStream(savedFile))){
+                                    byte[] buffer = new byte[4096];
+                                    long bytesRead = 0;
+                                    int read;
+                                    while (bytesRead < fileSize && (read = dataIn.read(buffer)) != -1){
+                                        fileOut.write(buffer,0,read);
+                                        bytesRead += read;
+                                    }
+                                    fileOut.flush();
+                                    System.out.println("已接收文件: "+savedFile.getAbsoluteFile());
+                                }catch (IOException e){
+                                    if(isRunning.get()){
+                                        System.err.println("接收文件时出现错误: "+e.getMessage());
+                                    }
+                                }
+                            }
+                        }
+                    } catch (IOException e) {
+                        if(isRunning.get()){
+                            System.err.println("文件接收端口启动失败: "+e.getMessage());
+                        }
+                    }
+                }
+        );
+        fileServerThread.setDaemon(true);
+        fileServerThread.start();
     }
 
     private void connectToServer() throws IOException {

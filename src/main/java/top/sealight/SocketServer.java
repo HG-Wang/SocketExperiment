@@ -92,7 +92,8 @@ public class SocketServer {
                 3. all <消息内容> - 将消息发送给所有客户端
                 4. kick <客户端ID> - 断开指定客户端的连接
                 5. shutdown - 关闭服务器
-                6. help - 显示此帮助信息
+                6. sendfile <客户端ID> <文件路径> - 向指定客户端发送文件
+                7. help - 显示此帮助信息
                 """);
     }
 
